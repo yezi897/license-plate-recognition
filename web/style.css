@@ -2,6 +2,7 @@
   --color-primary: #2563eb;
   --color-primary-dark: #1d4ed8;
   --color-primary-light: #3b82f6;
+  --color-primary-accent: #60a5fa;
   --color-primary-bg: #eff6ff;
   --color-success: #16a34a;
   --color-success-bg: #dcfce7;
@@ -220,7 +221,7 @@ body {
 
 .video-container {
   width: 100%;
-  height: 240px;
+  height: 200px;
   background: #0f172a;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -307,7 +308,7 @@ body {
 
 /* 主按钮 */
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-light) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-light) 50%, var(--color-primary-accent) 100%);
   color: white;
   box-shadow: var(--shadow-md);
   animation: pulse 2.5s ease-in-out infinite;
