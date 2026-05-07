@@ -309,62 +309,57 @@ function toggleAutoRecognize() {
 }
 
 function startAutoRecognize() {
-    autoRecognize = true;
-    btnAuto.textContent = '停止识别';
-    btnAuto.className = 'btn btn-danger';
-    btnCapture.disabled = true;
-    autoRecognizeOnce();
+  autoRecognize = true;
+  btnAuto.className = 'btn btn-danger';
+  btnAuto.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    <span>停止识别</span>
+  `;
+  btnCapture.disabled = true;
+  if (autoIndicator) autoIndicator.style.display = 'flex';
+  autoRecognizeOnce();
 }
 
 function stopAutoRecognize() {
-    autoRecognize = false;
-    if (autoTimer) {
-        clearTimeout(autoTimer);
-        autoTimer = null;
-    }
-    btnAuto.textContent = '自动识别';
-    btnAuto.className = 'btn btn-secondary';
-    btnCapture.disabled = false;
+  autoRecognize = false;
+  if (autoTimer) {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+  }
+  btnAuto.className = 'btn btn-secondary';
+  btnAuto.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    <span>自动识别</span>
+  `;
+  btnCapture.disabled = false;
+  if (autoIndicator) autoIndicator.style.display = 'none';
 }
 
 async function autoRecognizeOnce() {
-    if (!autoRecognize || !isConnected) {
-        stopAutoRecognize();
-        return;
+  if (!autoRecognize || !isConnected) {
+    stopAutoRecognize();
+    return;
+  }
+
+  const wasStreaming = streaming;
+  stopStream();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/stream/recognize`);
+    const data = await res.json();
+
+    if (data.status === 'ok' && data.result) {
+      showResult(data.result);
+      loadHistory();
     }
+  } catch (e) {
+    // 网络错误，继续重试
+  }
 
-    // 暂停流式预览，避免串口冲突
-    const wasStreaming = streaming;
-    stopStream();
-
-    try {
-        const res = await fetch(`${API_BASE}/api/stream/recognize`);
-        const data = await res.json();
-
-        if (data.status === 'ok' && data.result) {
-            resultContent.innerHTML = `
-                <div class="result-item">
-                    <div class="plate-number">${data.result.plate_number}</div>
-                    <div class="plate-info">
-                        <p>颜色: ${data.result.color}</p>
-                        <p>置信度: ${data.result.confidence}%</p>
-                    </div>
-                </div>
-            `;
-            loadHistory();
-        } else if (data.status === 'ok') {
-            // 没识别到车牌，继续尝试
-        }
-    } catch (e) {
-        // 网络错误，继续重试
-    }
-
-    // 恢复流式预览
-    if (autoRecognize && isConnected) {
-        if (wasStreaming) startStream();
-        // 3秒后再次识别
-        autoTimer = setTimeout(autoRecognizeOnce, 3000);
-    }
+  if (autoRecognize && isConnected) {
+    if (wasStreaming) startStream();
+    autoTimer = setTimeout(autoRecognizeOnce, 3000);
+  }
 }
 
 // ===== 配置管理 =====
