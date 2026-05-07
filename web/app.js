@@ -269,29 +269,44 @@ function showResult(result) {
 
 // ===== 历史记录 =====
 async function loadHistory() {
-    try {
-        const res = await fetch(`${API_BASE}/api/history?page=${currentPage}&per_page=10`);
-        const data = await res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/history?page=${currentPage}&per_page=10`);
+    const data = await res.json();
 
-        historyBody.innerHTML = '';
-        data.records.forEach(record => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${record.plate_number}</td>
-                <td>${record.color}</td>
-                <td>${record.confidence}%</td>
-                <td>${new Date(record.created_at).toLocaleString('zh-CN')}</td>
-            `;
-            historyBody.appendChild(row);
-        });
+    historyBody.innerHTML = '';
+    data.records.forEach(record => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="col-plate">${record.plate_number}</td>
+        <td>${record.color}</td>
+        <td class="col-confidence">${record.confidence}%</td>
+        <td class="col-time">${new Date(record.created_at).toLocaleString('zh-CN')}</td>
+      `;
+      historyBody.appendChild(row);
+    });
 
-        const totalPages = Math.ceil(data.total / data.per_page);
-        pageInfo.textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
-        btnPrev.disabled = currentPage <= 1;
-        btnNext.disabled = currentPage >= totalPages;
-    } catch (e) {
-        console.error('加载历史记录失败:', e);
+    const totalPages = Math.ceil(data.total / data.per_page);
+    pageInfo.textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
+    btnPrev.style.opacity = currentPage <= 1 ? '0.4' : '1';
+    btnPrev.style.pointerEvents = currentPage <= 1 ? 'none' : 'auto';
+    btnNext.style.opacity = currentPage >= totalPages ? '0.4' : '1';
+    btnNext.style.pointerEvents = currentPage >= totalPages ? 'none' : 'auto';
+
+    if (historyCount) {
+      historyCount.textContent = `共 ${data.total} 条记录`;
     }
+
+    // 更新统计
+    if (statToday) {
+      statToday.textContent = data.total || 0;
+    }
+    if (statConfidence && data.records.length > 0) {
+      const avg = data.records.reduce((sum, r) => sum + r.confidence, 0) / data.records.length;
+      statConfidence.textContent = avg.toFixed(1) + '%';
+    }
+  } catch (e) {
+    console.error('加载历史记录失败:', e);
+  }
 }
 
 function changePage(delta) {
