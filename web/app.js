@@ -82,24 +82,34 @@ async function checkStatus() {
 }
 
 function updateStatusUI() {
-    if (isConnected) {
-        statusIndicator.textContent = '已连接';
-        statusIndicator.className = 'status connected';
-        btnConnect.textContent = '断开连接';
-        btnCapture.disabled = false;
-        btnAuto.disabled = false;
-        videoPlaceholder.style.display = 'none';
-        startStream();
-    } else {
-        statusIndicator.textContent = '未连接';
-        statusIndicator.className = 'status disconnected';
-        btnConnect.textContent = '连接设备';
-        btnCapture.disabled = true;
-        btnAuto.disabled = true;
-        videoPlaceholder.style.display = 'block';
-        stopAutoRecognize();
-        stopStream();
-    }
+  if (isConnected) {
+    statusIndicator.textContent = '已连接';
+    statusIndicator.className = 'status-badge connected';
+    btnConnect.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      <span>断开连接</span>
+      <div class="btn-shimmer"></div>
+    `;
+    btnCapture.disabled = false;
+    btnAuto.disabled = false;
+    videoPlaceholder.style.display = 'none';
+    if (liveBadge) liveBadge.style.display = 'block';
+    startStream();
+  } else {
+    statusIndicator.textContent = '未连接';
+    statusIndicator.className = 'status-badge disconnected';
+    btnConnect.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>连接设备</span>
+      <div class="btn-shimmer"></div>
+    `;
+    btnCapture.disabled = true;
+    btnAuto.disabled = true;
+    videoPlaceholder.style.display = 'block';
+    if (liveBadge) liveBadge.style.display = 'none';
+    stopAutoRecognize();
+    stopStream();
+  }
 }
 
 // ===== 实时预览流控制 =====
