@@ -204,49 +204,67 @@ async function toggleConnection() {
 
 // ===== 拍照识别 =====
 async function captureAndRecognize() {
-    // 拍照时暂停流式预览，避免串口冲突
-    const wasStreaming = streaming;
-    stopStream();
+  const wasStreaming = streaming;
+  stopStream();
 
-    btnCapture.disabled = true;
-    btnCapture.textContent = '识别中...';
-    resultContent.innerHTML = '<p class="placeholder">正在识别...</p>';
+  btnCapture.disabled = true;
+  btnCapture.className = 'btn btn-loading';
+  btnCapture.innerHTML = `
+    <div class="btn-spinner"></div>
+    <span>识别中...</span>
+    <div class="btn-progress"></div>
+  `;
+  btnAuto.disabled = true;
+  resultContent.innerHTML = '<div class="result-placeholder">正在识别...</div>';
 
-    try {
-        const res = await fetch(`${API_BASE}/api/capture`, { method: 'POST' });
-        const data = await res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/capture`, { method: 'POST' });
+    const data = await res.json();
 
-        if (data.status === 'ok' && data.result) {
-            resultContent.innerHTML = `
-                <div class="result-item">
-                    <div class="plate-number">${data.result.plate_number}</div>
-                    <div class="plate-info">
-                        <p>颜色: ${data.result.color}</p>
-                        <p>置信度: ${data.result.confidence}%</p>
-                    </div>
-                </div>
-            `;
-            loadHistory();
-        } else if (data.image) {
-            resultContent.innerHTML = `
-                <div class="result-item">
-                    <p class="placeholder">${data.message || '未识别到车牌'}</p>
-                </div>
-            `;
-        } else {
-            resultContent.innerHTML = `<p class="placeholder">${data.message || '识别失败'}</p>`;
-        }
-    } catch (e) {
-        resultContent.innerHTML = `<p class="placeholder">识别出错: ${e.message}</p>`;
+    if (data.status === 'ok' && data.result) {
+      showResult(data.result);
+      loadHistory();
+    } else if (data.image) {
+      resultContent.innerHTML = `<div class="result-placeholder">${data.message || '未识别到车牌'}</div>`;
+    } else {
+      resultContent.innerHTML = `<div class="result-placeholder">${data.message || '识别失败'}</div>`;
     }
+  } catch (e) {
+    resultContent.innerHTML = `<div class="result-placeholder">识别出错: ${e.message}</div>`;
+  }
 
-    btnCapture.disabled = false;
-    btnCapture.textContent = '拍照识别';
+  btnCapture.disabled = false;
+  btnCapture.className = 'btn btn-primary';
+  btnCapture.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+    <span>拍照识别</span>
+    <div class="btn-shimmer"></div>
+  `;
+  btnAuto.disabled = false;
 
-    // 恢复流式预览
-    if (wasStreaming && isConnected) {
-        startStream();
-    }
+  if (wasStreaming && isConnected) {
+    startStream();
+  }
+}
+
+function showResult(result) {
+  resultContent.innerHTML = `
+    <div class="plate-number">${result.plate_number}</div>
+    <div class="result-meta">
+      <div class="meta-item">
+        <span class="meta-label">颜色</span>
+        <span class="meta-value">${result.color}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">置信度</span>
+        <span class="meta-value success">${result.confidence}%</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">时间</span>
+        <span class="meta-value">${new Date().toLocaleTimeString('zh-CN')}</span>
+      </div>
+    </div>
+  `;
 }
 
 // ===== 历史记录 =====
