@@ -43,6 +43,17 @@ class ServerWorker(QThread):
             env["PYTHONPATH"] = str(self.server_dir)
             env["PYTHONHOME"] = str(self.python_dir)
 
+            # 3.1 创建启动包装脚本，确保 sys.path 包含服务器目录
+            wrapper_py = self.work_dir / "_start_server.py"
+            wrapper_py.write_text(
+                f'import sys\n'
+                f'sys.path.insert(0, r"{self.server_dir}")\n'
+                f'import os\n'
+                f'os.chdir(r"{self.server_dir}")\n'
+                f'exec(open(r"{self.server_dir / "app.py"}").read())\n',
+                encoding="utf-8",
+            )
+
             # 4. 安装 pip (如果需要)
             pip_check = subprocess.run(
                 [str(python_exe), "-m", "pip", "--version"],
@@ -78,9 +89,8 @@ class ServerWorker(QThread):
             self.log.emit("启动服务器...")
             self.status.emit("running")
 
-            app_py = self.server_dir / "app.py"
             self._process = subprocess.Popen(
-                [str(python_exe), str(app_py)],
+                [str(python_exe), str(wrapper_py)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
