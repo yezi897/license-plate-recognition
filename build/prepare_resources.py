@@ -12,6 +12,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -155,13 +156,17 @@ def download_python():
         pth_file.write_text(content, encoding="utf-8")
         print(f"  已启用 site-packages: {pth_file.name}")
 
-    # 使用 ensurepip 引导安装 pip
+    # 使用 get-pip.py 安装 pip (ensurepip 在嵌入式 Python 中不可用)
     python_exe = python_dir / "python.exe"
     print("  安装 pip...")
-    subprocess.run(
-        [str(python_exe), "-m", "ensurepip", "--upgrade"],
+    get_pip_py = BUILD_DIR / "get-pip.py"
+    urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", str(get_pip_py))
+    result = subprocess.run(
+        [str(python_exe), str(get_pip_py)],
         capture_output=True, text=True,
     )
+    if get_pip_py.exists():
+        get_pip_py.unlink()
 
     # 验证 pip 安装
     result = subprocess.run(
