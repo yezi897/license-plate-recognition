@@ -29,14 +29,17 @@ SERVER_DIR = PROJECT_ROOT / "server"
 WEB_DIR = PROJECT_ROOT / "web"
 REQUIREMENTS_FILE = SERVER_DIR / "requirements.txt"
 
-# Python embeddable
+# 固件编译
+BOARD_FQBN = "esp32:esp32:esp32s3"
+
+# Python embeddable (仅 amd64)
 PYTHON_VERSION = "3.10.11"
 PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 
 
 def clean_resources():
     """清理并重建 build/resources/ 目录。"""
-    print("[1/5] 清理资源目录...")
+    print("[1/6] 清理资源目录...")
     if RESOURCES_DIR.exists():
         shutil.rmtree(RESOURCES_DIR)
     RESOURCES_DIR.mkdir(parents=True)
@@ -45,14 +48,20 @@ def clean_resources():
 
 def extract_esptool():
     """从 Arduino15 packages 目录提取 esptool。"""
-    print("[2/5] 提取 esptool...")
+    print("[2/6] 提取 esptool...")
     esptool_dir = ARDUINO15 / "packages" / "esp32" / "tools" / "esptool_py"
 
     if not esptool_dir.exists():
         raise FileNotFoundError(f"esptool 目录不存在: {esptool_dir}")
 
-    # 查找最新版本目录
-    versions = sorted(esptool_dir.iterdir())
+    # 按语义版本号排序查找最新版本
+    def version_key(p):
+        try:
+            return [int(x) for x in p.name.split('.')]
+        except (ValueError, AttributeError):
+            return [0]
+
+    versions = sorted(esptool_dir.iterdir(), key=version_key)
     if not versions:
         raise FileNotFoundError(f"在 {esptool_dir} 中未找到 esptool 版本")
 
@@ -74,7 +83,7 @@ def extract_esptool():
 
 def compile_firmware():
     """使用 arduino-cli 编译固件，复制 .bin 到 resources。"""
-    print("[3/5] 编译固件...")
+    print("[3/6] 编译固件...")
 
     if not ARDUINO_CLI.exists():
         raise FileNotFoundError(f"arduino-cli 不存在: {ARDUINO_CLI}")
@@ -88,13 +97,13 @@ def compile_firmware():
     cmd = [
         str(ARDUINO_CLI),
         "compile",
-        "--fqbn", "esp32:esp32:esp32s3",
+        "--fqbn", BOARD_FQBN,
         "--output-dir", str(output_dir),
         str(FIRMWARE_DIR),
     ]
 
     print(f"  执行: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if result.returncode != 0:
         print(f"  编译输出:\n{result.stdout}")
@@ -117,15 +126,18 @@ def compile_firmware():
 
 def download_python():
     """下载 Python 3.10.11 embeddable 并启用 site-packages。"""
-    print("[4/5] 下载 Python embeddable...")
+    print("[4/6] 下载 Python embeddable...")
 
     python_dir = RESOURCES_DIR / "python"
     python_dir.mkdir(exist_ok=True)
 
     zip_path = BUILD_DIR / "python-embed.zip"
 
-    # 下载
+    # 下载 (30秒超时)
     print(f"  下载: {PYTHON_URL}")
+    opener = urllib.request.build_opener()
+    opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+    urllib.request.install_opener(opener)
     urllib.request.urlretrieve(PYTHON_URL, zip_path)
 
     # 解压
@@ -148,7 +160,7 @@ def download_python():
 
 def download_wheels():
     """使用 pip download 获取离线 wheels。"""
-    print("[5/5] 下载 pip wheels...")
+    print("[5/6] 下载 pip wheels...")
 
     if not REQUIREMENTS_FILE.exists():
         raise FileNotFoundError(f"requirements.txt 不存在: {REQUIREMENTS_FILE}")
@@ -160,12 +172,12 @@ def download_wheels():
         "pip",
         "download",
         "--dest", str(wheels_dir),
-        "--only-binary=:all:",
+        "--prefer-binary",
         "-r", str(REQUIREMENTS_FILE),
     ]
 
     print(f"  执行: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if result.returncode != 0:
         print(f"  pip 输出:\n{result.stdout}")
@@ -178,7 +190,7 @@ def download_wheels():
 
 def copy_server_files():
     """复制 server/ 和 web/ 到 resources。"""
-    print("[额外] 复制 server 和 web 文件...")
+    print("[6/6] 复制 server 和 web 文件...")
 
     # 复制 server/，忽略不需要的文件
     server_dest = RESOURCES_DIR / "server"
@@ -191,6 +203,7 @@ def copy_server_files():
             "*.db",
             "images",
             "config.json",
+            "test_*.py",
         ),
     )
     print(f"  已复制: server/ -> {server_dest}")
