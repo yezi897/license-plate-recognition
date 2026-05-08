@@ -50,7 +50,7 @@ class ServerWorker(QThread):
                 f'sys.path.insert(0, r"{self.server_dir}")\n'
                 f'import os\n'
                 f'os.chdir(r"{self.server_dir}")\n'
-                f'exec(open(r"{self.server_dir / "app.py"}").read())\n',
+                f'exec(open(r"{self.server_dir / "app.py"}", encoding="utf-8").read())\n',
                 encoding="utf-8",
             )
 
