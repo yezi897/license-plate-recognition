@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/*
+!build/prepare_resources.py
+!build/requirements_build.txt
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+arduino-cli.exe
+server/images/
+server/records.db
+server/config.json
+
+# Tool configs
+.claude/
+.superpowers/
+
+# Environment variables
+.env
+.env.local
