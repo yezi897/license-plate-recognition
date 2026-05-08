@@ -155,12 +155,30 @@ def download_python():
         pth_file.write_text(content, encoding="utf-8")
         print(f"  已启用 site-packages: {pth_file.name}")
 
+    # 使用 ensurepip 引导安装 pip
+    python_exe = python_dir / "python.exe"
+    print("  安装 pip...")
+    subprocess.run(
+        [str(python_exe), "-m", "ensurepip", "--upgrade"],
+        capture_output=True, text=True,
+    )
+
+    # 验证 pip 安装
+    result = subprocess.run(
+        [str(python_exe), "-m", "pip", "--version"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        print(f"  pip 已安装: {result.stdout.strip()}")
+    else:
+        print("  警告: pip 安装失败，服务器启动时可能无法安装依赖")
+
     print(f"  完成: Python {PYTHON_VERSION} 已解压到 {python_dir}")
 
 
 def download_wheels():
-    """使用 pip download 获取离线 wheels。"""
-    print("[5/6] 下载 pip wheels...")
+    """使用 pip download 获取离线 wheels 并安装到嵌入式 Python。"""
+    print("[5/6] 下载并安装 pip wheels...")
 
     if not REQUIREMENTS_FILE.exists():
         raise FileNotFoundError(f"requirements.txt 不存在: {REQUIREMENTS_FILE}")
@@ -168,15 +186,17 @@ def download_wheels():
     wheels_dir = RESOURCES_DIR / "wheels"
     wheels_dir.mkdir(exist_ok=True)
 
+    # 1. 下载 wheels
     cmd = [
-        "pip",
+        sys.executable,
+        "-m", "pip",
         "download",
         "--dest", str(wheels_dir),
         "--prefer-binary",
         "-r", str(REQUIREMENTS_FILE),
     ]
 
-    print(f"  执行: {' '.join(cmd)}")
+    print(f"  下载: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if result.returncode != 0:
@@ -185,7 +205,26 @@ def download_wheels():
         raise RuntimeError("pip download 失败")
 
     wheel_count = len(list(wheels_dir.glob("*.whl")))
-    print(f"  完成: 已下载 {wheel_count} 个 wheel 到 {wheels_dir}")
+    print(f"  已下载 {wheel_count} 个 wheel")
+
+    # 2. 安装 wheels 到嵌入式 Python
+    python_exe = RESOURCES_DIR / "python" / "python.exe"
+    if python_exe.exists():
+        cmd = [
+            str(python_exe),
+            "-m", "pip", "install",
+            "--no-index",
+            f"--find-links={wheels_dir}",
+            "-r", str(REQUIREMENTS_FILE),
+        ]
+        print(f"  安装到嵌入式 Python: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            print(f"  安装警告:\n{result.stderr}")
+        else:
+            print("  依赖已安装到嵌入式 Python")
+
+    print(f"  完成: {wheel_count} 个 wheel 已处理")
 
 
 def copy_server_files():
