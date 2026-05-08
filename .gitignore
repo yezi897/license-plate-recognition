@@ -8,6 +8,7 @@ build/*
 !build/requirements_build.txt
 !build/flash_worker.py
 !build/server_worker.py
+!build/deploy_gui.py
 *.egg
 
 # Virtual environment
