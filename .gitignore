@@ -10,6 +10,7 @@ build/*
 !build/server_worker.py
 !build/deploy_gui.py
 !build/deploy.spec
+!build/build.py
 *.egg
 
 # Virtual environment
