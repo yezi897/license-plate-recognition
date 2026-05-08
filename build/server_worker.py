@@ -54,38 +54,32 @@ class ServerWorker(QThread):
                 encoding="utf-8",
             )
 
-            # 4. 安装 pip (如果需要)
-            pip_check = subprocess.run(
-                [str(python_exe), "-m", "pip", "--version"],
+            # 4. 验证依赖是否可用
+            self.log.emit("验证依赖...")
+            check = subprocess.run(
+                [str(python_exe), "-c", "import flask; import serial; import PIL; print('依赖检查通过')"],
                 capture_output=True, text=True, env=env,
             )
-            if pip_check.returncode != 0:
-                self.log.emit("安装 pip...")
-                get_pip = self.work_dir / "get-pip.py"
-                import urllib.request
-                urllib.request.urlretrieve(
-                    "https://bootstrap.pypa.io/get-pip.py", str(get_pip)
-                )
-                subprocess.run([str(python_exe), str(get_pip)], env=env)
+            if check.returncode != 0:
+                self.log.emit(f"依赖检查失败: {check.stderr}")
+                # 尝试离线安装
+                self.log.emit("尝试离线安装依赖...")
+                req_file = self.server_dir / "requirements.txt"
+                cmd = [
+                    str(python_exe), "-m", "pip", "install",
+                    "--no-index",
+                    f"--find-links={self.wheels_dir}",
+                    "-r", str(req_file),
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+                if result.returncode != 0:
+                    self.log.emit(f"依赖安装失败:\n{result.stderr}")
+                    self.finished.emit(False)
+                    return
+            else:
+                self.log.emit(check.stdout.strip())
 
-            # 5. 离线安装依赖
-            self.log.emit("安装依赖 (离线模式)...")
-            req_file = self.server_dir / "requirements.txt"
-            cmd = [
-                str(python_exe), "-m", "pip", "install",
-                "--no-index",
-                f"--find-links={self.wheels_dir}",
-                "-r", str(req_file),
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
-            if result.returncode != 0:
-                self.log.emit(f"依赖安装失败:\n{result.stderr}")
-                self.finished.emit(False)
-                return
-
-            self.log.emit("依赖安装完成")
-
-            # 6. 启动 Flask 服务器
+            # 5. 启动 Flask 服务器
             self.log.emit("启动服务器...")
             self.status.emit("running")
 
