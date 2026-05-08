@@ -7,6 +7,7 @@ build/*
 !build/prepare_resources.py
 !build/requirements_build.txt
 !build/flash_worker.py
+!build/server_worker.py
 *.egg
 
 # Virtual environment
