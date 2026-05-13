@@ -10,6 +10,7 @@ let fpsTimer = null;
 let lastFrameTime = 0;
 let autoRecognize = false;
 let autoTimer = null;
+let currentMode = 'serial';  // 'serial' or 'wifi'
 
 // DOM 元素
 const statusIndicator = document.getElementById('status-indicator');
@@ -59,6 +60,21 @@ function bindEvents() {
   if (btnAuto) {
     btnAuto.addEventListener('click', toggleAutoRecognize);
   }
+  const btnClearHistory = document.getElementById('btn-clear-history');
+  if (btnClearHistory) {
+    btnClearHistory.addEventListener('click', clearHistory);
+  }
+
+  // 通信模式切换
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const mode = btn.dataset.mode;
+      document.getElementById('serial-config').style.display = mode === 'serial' ? 'block' : 'none';
+      document.getElementById('wifi-config').style.display = mode === 'wifi' ? 'block' : 'none';
+    });
+  });
 
   // 侧边导航
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -75,6 +91,7 @@ async function checkStatus() {
         const res = await fetch(`${API_BASE}/api/status`);
         const data = await res.json();
         isConnected = data.serial_connected;
+        currentMode = data.comm_mode || 'serial';
         updateStatusUI();
     } catch (e) {
         console.error('获取状态失败:', e);
@@ -314,6 +331,20 @@ function changePage(delta) {
     loadHistory();
 }
 
+async function clearHistory() {
+  if (!confirm('确定要清空所有历史记录吗？此操作不可恢复。')) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/history/clear`, { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      currentPage = 1;
+      loadHistory();
+    }
+  } catch (e) {
+    alert('清空失败: ' + e.message);
+  }
+}
+
 // ===== 自动识别 =====
 function toggleAutoRecognize() {
     if (autoRecognize) {
@@ -382,8 +413,26 @@ async function loadConfig() {
     try {
         const res = await fetch(`${API_BASE}/api/config`);
         const config = await res.json();
+
+        // 通信模式
+        currentMode = config.comm_mode || 'serial';
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === currentMode);
+        });
+        document.getElementById('serial-config').style.display = currentMode === 'serial' ? 'block' : 'none';
+        document.getElementById('wifi-config').style.display = currentMode === 'wifi' ? 'block' : 'none';
+
+        // 串口配置
         document.getElementById('input-port').value = config.serial_port || '';
         document.getElementById('input-baud').value = config.baud_rate || 115200;
+
+        // WiFi 配置
+        document.getElementById('input-esp32-ip').value = config.esp32_ip || '';
+        document.getElementById('input-esp32-port').value = config.esp32_port || 8080;
+        document.getElementById('input-wifi-ssid').value = config.wifi_ssid || '';
+        document.getElementById('input-wifi-password').value = config.wifi_password || '';
+
+        // 百度云配置
         document.getElementById('input-app-id').value = config.baidu_app_id || '';
         document.getElementById('input-api-key').value = config.baidu_api_key || '';
         document.getElementById('input-secret-key').value = config.baidu_secret_key || '';
@@ -393,9 +442,15 @@ async function loadConfig() {
 }
 
 async function saveConfig() {
+    const mode = document.querySelector('.mode-btn.active').dataset.mode;
     const config = {
+        comm_mode: mode,
         serial_port: document.getElementById('input-port').value,
         baud_rate: parseInt(document.getElementById('input-baud').value),
+        esp32_ip: document.getElementById('input-esp32-ip').value,
+        esp32_port: parseInt(document.getElementById('input-esp32-port').value) || 8080,
+        wifi_ssid: document.getElementById('input-wifi-ssid').value,
+        wifi_password: document.getElementById('input-wifi-password').value,
         baidu_app_id: document.getElementById('input-app-id').value,
         baidu_api_key: document.getElementById('input-api-key').value,
         baidu_secret_key: document.getElementById('input-secret-key').value
@@ -410,6 +465,7 @@ async function saveConfig() {
         const data = await res.json();
         if (data.status === 'ok') {
             settingsModal.classList.add('hidden');
+            currentMode = mode;
             alert('配置已保存');
         }
     } catch (e) {

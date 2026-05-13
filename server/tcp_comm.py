@@ -1,34 +1,47 @@
-import serial
+import socket
 import time
+import select
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class SerialComm:
-    def __init__(self, port, baud_rate=115200):
+class TcpComm:
+    def __init__(self, host, port=8080):
+        self.host = host
         self.port = port
-        self.baud_rate = baud_rate
-        self.serial_conn = None
+        self.sock = None
 
     def connect(self):
-        self.serial_conn = serial.Serial(
-            self.port, self.baud_rate, timeout=0.1
-        )
-        # 加大接收缓冲区，减少高速传输时的丢包
-        try:
-            self.serial_conn.set_buffer_size(rx_size=65536)
-        except Exception:
-            pass  # 部分平台不支持，忽略
-        time.sleep(0.5)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(5)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.sock.connect((self.host, self.port))
+        self.sock.settimeout(None)
+        logger.info("TCP 连接成功: %s:%d", self.host, self.port)
 
     def is_connected(self):
-        return self.serial_conn is not None and self.serial_conn.is_open
+        if self.sock is None:
+            return False
+        try:
+            # 检查 socket 是否仍然可读（非阻塞探测）
+            readable, _, _ = select.select([self.sock], [], [], 0)
+            if readable:
+                # 尝试 peek 数据，如果返回空说明连接已断开
+                data = self.sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+                if not data:
+                    return False
+            return True
+        except (OSError, BlockingIOError):
+            return False
 
     def disconnect(self):
-        if self.serial_conn:
-            self.serial_conn.close()
-            self.serial_conn = None
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
 
     def _read_exactly(self, size, deadline):
         """保证读满 size 字节，无新数据超过 0.5 秒则提前放弃"""
@@ -37,27 +50,32 @@ class SerialComm:
         while len(data) < size:
             if time.time() > deadline:
                 break
-            # 无进展超过 0.5 秒，说明数据已丢失，不再等待
             if time.time() - last_progress > 0.5:
                 break
             remaining = size - len(data)
-            try:
-                chunk = self.serial_conn.read(remaining)
-            except Exception:
+            timeout = min(0.1, deadline - time.time())
+            if timeout <= 0:
                 break
-            if chunk:
+            try:
+                ready, _, _ = select.select([self.sock], [], [], timeout)
+                if not ready:
+                    continue
+                chunk = self.sock.recv(remaining)
+                if not chunk:
+                    break
                 data += chunk
                 last_progress = time.time()
+            except Exception:
+                break
         return data
 
     def capture_image(self, cmd=b'C', timeout=10):
         if not self.is_connected():
-            logger.warning("capture_image: 未连接")
+            logger.warning("capture_image: TCP 未连接")
             return None
 
         try:
-            self.serial_conn.reset_input_buffer()
-            self.serial_conn.write(cmd)
+            self.sock.send(cmd)
         except Exception as e:
             logger.warning("capture_image: 发送命令失败: %s", e)
             return None
@@ -65,18 +83,23 @@ class SerialComm:
 
         deadline = time.time() + timeout
 
-        # 第一阶段: 逐字节读取，寻找 IMG_START 标记
+        # 第一阶段: 寻找 IMG_START 标记
         marker = b''
         while time.time() < deadline:
+            timeout_val = min(0.1, deadline - time.time())
+            if timeout_val <= 0:
+                break
             try:
-                byte = self.serial_conn.read(1)
+                ready, _, _ = select.select([self.sock], [], [], timeout_val)
+                if not ready:
+                    continue
+                byte = self.sock.recv(1)
             except Exception:
                 logger.warning("capture_image: 读取中断")
                 return None
             if not byte:
                 continue
             marker += byte
-            # 只保留最近 9 字节用于匹配
             if len(marker) > 9:
                 marker = marker[-9:]
             if marker == b'IMG_START':
@@ -93,7 +116,7 @@ class SerialComm:
         img_length = int.from_bytes(len_bytes, 'little')
         logger.info("capture_image: 图片大小 %d bytes", img_length)
 
-        # 第三阶段: 用 read_exactly 读取图片数据
+        # 第三阶段: 读取图片数据
         image_data = self._read_exactly(img_length, deadline)
         logger.info("capture_image: 实际读取 %d / %d bytes", len(image_data), img_length)
 
@@ -105,7 +128,7 @@ class SerialComm:
                 logger.warning("JPEG 数据校验失败: size=%d, head=%s", len(image_data), image_data[:4].hex())
             return None
 
-        # 容忍少量缺失（USB 传输偶发丢字节，JPEG 自封闭格式可正常显示）
+        # TCP 传输理论上不应丢数据，但仍容忍少量缺失
         if len(image_data) < img_length:
             ratio = len(image_data) / img_length
             if ratio < 0.95:

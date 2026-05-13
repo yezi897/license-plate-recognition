@@ -31,7 +31,7 @@ WEB_DIR = PROJECT_ROOT / "web"
 REQUIREMENTS_FILE = SERVER_DIR / "requirements.txt"
 
 # 固件编译
-BOARD_FQBN = "esp32:esp32:esp32s3"
+BOARD_FQBN = "esp32:esp32:esp32s3:PSRAM=opi"
 
 # Python embeddable (仅 amd64)
 PYTHON_VERSION = "3.10.11"
@@ -111,12 +111,16 @@ def compile_firmware():
         print(f"  编译错误:\n{result.stderr}")
         raise RuntimeError("固件编译失败")
 
-    # 查找 .bin 文件
-    bin_files = list(output_dir.glob("*.bin"))
-    if not bin_files:
-        raise FileNotFoundError(f"在 {output_dir} 中未找到 .bin 文件")
+    # 查找 .bin 文件（优先使用 merged.bin，包含 bootloader+分区表+应用固件）
+    merged_bin = output_dir / "camera_capture.ino.merged.bin"
+    if merged_bin.exists():
+        bin_file = merged_bin
+    else:
+        bin_files = list(output_dir.glob("*.bin"))
+        if not bin_files:
+            raise FileNotFoundError(f"在 {output_dir} 中未找到 .bin 文件")
+        bin_file = bin_files[0]
 
-    bin_file = bin_files[0]
     dest = RESOURCES_DIR / "firmware.bin"
     shutil.copy2(bin_file, dest)
     print(f"  完成: {bin_file.name} -> {dest}")
@@ -191,18 +195,26 @@ def download_wheels():
     wheels_dir = RESOURCES_DIR / "wheels"
     wheels_dir.mkdir(exist_ok=True)
 
-    # 1. 下载 wheels
+    # 1. 下载 wheels（使用清华镜像源，禁用代理）
+    env = os.environ.copy()
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"]:
+        env[key] = ""
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
+
     cmd = [
         sys.executable,
         "-m", "pip",
         "download",
         "--dest", str(wheels_dir),
         "--prefer-binary",
+        "-i", "https://pypi.tuna.tsinghua.edu.cn/simple",
+        "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
         "-r", str(REQUIREMENTS_FILE),
     ]
 
     print(f"  下载: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
 
     if result.returncode != 0:
         print(f"  pip 输出:\n{result.stdout}")
@@ -215,6 +227,7 @@ def download_wheels():
     # 2. 安装 wheels 到嵌入式 Python
     python_exe = RESOURCES_DIR / "python" / "python.exe"
     if python_exe.exists():
+        # 优先离线安装
         cmd = [
             str(python_exe),
             "-m", "pip", "install",
@@ -222,12 +235,27 @@ def download_wheels():
             f"--find-links={wheels_dir}",
             "-r", str(REQUIREMENTS_FILE),
         ]
-        print(f"  安装到嵌入式 Python: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(f"  离线安装: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
         if result.returncode != 0:
-            print(f"  安装警告:\n{result.stderr}")
+            # 离线安装失败，从镜像源在线安装
+            print("  离线安装失败，尝试从镜像源在线安装...")
+            cmd = [
+                str(python_exe),
+                "-m", "pip", "install",
+                "--proxy", "",
+                "-i", "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
+                "-r", str(REQUIREMENTS_FILE),
+            ]
+            print(f"  在线安装: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+            if result.returncode != 0:
+                print(f"  安装警告:\n{result.stderr}")
+            else:
+                print("  依赖已从镜像源安装到嵌入式 Python")
         else:
-            print("  依赖已安装到嵌入式 Python")
+            print("  依赖已离线安装到嵌入式 Python")
 
     print(f"  完成: {wheel_count} 个 wheel 已处理")
 

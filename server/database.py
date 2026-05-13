@@ -49,3 +49,10 @@ class Database:
         count = cursor.fetchone()[0]
         conn.close()
         return count
+
+    def clear_records(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DELETE FROM records")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name='records'")
+        conn.commit()
+        conn.close()
