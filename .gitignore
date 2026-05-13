@@ -30,9 +30,13 @@ Thumbs.db
 
 # Project specific
 arduino-cli.exe
+arduino-cli
 server/images/
 server/records.db
 server/config.json
+
+# Firmware build artifacts
+firmware/*/build/
 
 # Tool configs
 .claude/
@@ -41,3 +45,7 @@ server/config.json
 # Environment variables
 .env
 .env.local
+
+# Node.js
+node_modules/
+package-lock.json
